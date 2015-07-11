@@ -170,7 +170,7 @@ def copy_single_dir(dir):
     command = ('scp -rp {dir} '.format(dir=dir) +
                get_selected_hosts(string=True) + ":~/")
     #  A little bit of a hack here, but the -i flag wasn't parsing correctly
-    # local('ssh-add ~/.ssh/pk-aws')
+    #  local('ssh-add ~/.ssh/pk-aws')
     local(command)
 
 
@@ -187,8 +187,16 @@ def deploy_local(new=False, dir=None, file=None, setup_py=True):
         execute_setup_py(dir)
     return
 
+#  Need to append configuration bits to end of
+# /etc/supervisor/supervisord.conf
 
 # May need to run
 # sudo unlink /var/run/supervisor.sock
 # to get access to the port that runs when
 # sudo service supervisor start
+
+#  Then need to run the
+#  sudo service start supervisor
+
+#  Can check app status with
+#  sudo supervisorctl status
