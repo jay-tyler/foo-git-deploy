@@ -14,7 +14,6 @@ env.ssh_key_path = '~/.ssh/pk-aws.pem'
 PATH_TO_SUPRCONF = "/etc/supervisor/supervisord.conf"
 
 
-
 def host_type():
     run('uname -s')
 
@@ -117,16 +116,13 @@ def get_selected_hosts(string=False):
     if not string:
         return selected_hosts
     else:
-        #This block currently serving copy_single_file()
+        #  This block currently serving copy_single_file() and
+        #  copy_single_dir()
         return str(selected_hosts[0])
-        print str(selected_hosts)
 
 
 def run_command_on_selected_server(command):
     select_instance()
-    # selected_hosts = [
-    #     'ubuntu@' + env.active_instance.public_dns_name
-    # ]
     execute(command, hosts=get_selected_hosts())
 
 
@@ -137,13 +133,14 @@ def install_pip():
 
 
 def install_supervisor():
-
     def _install_supervisor():
         sudo('apt-get install -y supervisor')
     run_command_on_selected_server(_install_supervisor)
 
 
 def setup_supervisor(app_name):
+    """Appends python application information to the supervisor conf file;
+    expects the application to be in a self-named directory in home dir"""
     def _setup_supervisor():
         conf_text_lst = ["[program:{app_name}]",
                          "command: /usr/bin/python -m {app_name}",
@@ -152,6 +149,20 @@ def setup_supervisor(app_name):
         conf_text = "\n".join(conf_text_lst).format(app_name=app_name)
         files.append(PATH_TO_SUPRCONF, conf_text, use_sudo=True)
     run_command_on_selected_server(_setup_supervisor)
+
+
+def start_supervisor():
+    def _start_supervisor():
+        sudo('service supervisor start')
+
+    run_command_on_selected_server(_start_supervisor)
+
+
+def restart_supervisor(app_name):
+    def _restart_supervisor():
+        sudo('supervisorctl restart {app_name}'.format(app_name=app_name))
+
+    run_command_on_selected_server(_restart_supervisor)
 
 
 def install_nginx():
@@ -164,13 +175,48 @@ def install_nginx():
     run_command_on_selected_server(_install_nginx)
 
 
-def execute_setup_py(dir=None):
+def execute_setup_py(app_name=None):
 
-    def _execute_setup_py(dir):
-        try:
-            pass
-        except TypeError:
-            pass
+    def _execute_setup_py():
+        sudo('sudo python ~/{app_name}/setup.py install'.format(
+             app_name=app_name))
+        sudo('sudo python ~/{app_name}/setup.py clean --all'.format(
+             app_name=app_name))
+
+    run_command_on_selected_server(_execute_setup_py)
+
+
+def unlink_port():
+    """Run this to free the port that supervisor needs access to"""
+    def _unlink_port():
+        sudo('sudo unlink /var/run/supervisor.sock')
+
+    run_command_on_selected_server(_unlink_port)
+
+
+def setup_nginx_conf():
+    """"""
+    def _setup_nginx_conf():
+
+        app_conf_l = ['server {{',
+        '    listen 80;'
+        '    server_name http://{dns}/;',
+        '    access_log  /var/log/nginx/test.log;\n',
+        '    location / {{',
+        '        proxy_pass http://127.0.0.1:8000;',
+        '        proxy_set_header Host $host;',
+        '        proxy_set_header X-Real-IP $remote_addr;',
+        '        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;',
+        '    }}']
+        app_conf = '/n'.join(app_conf_l).format(
+                   dns=env.active_instance.public_dns_name)
+
+        # sudo('mv /etc/nginx/sites-available/default\
+        #          /etc/nginx/sites-available/default.orig')
+        # sudo('rm /etc/nginx/sites-available/default')
+        sudo('touch /etc/nginx/sites-available/default')
+
+    run_command_on_selected_server(_setup_nginx_conf)
 
 
 def copy_single_file(file):
@@ -180,7 +226,6 @@ def copy_single_file(file):
 
 
 def copy_single_dir(dir):
-
     command = ('scp -rp {dir} '.format(dir=dir) +
                get_selected_hosts(string=True) + ":~/")
     #  A little bit of a hack here, but the -i flag wasn't parsing correctly
@@ -190,29 +235,31 @@ def copy_single_dir(dir):
 
 def deploy_local(new=False, dir=None, file=None, setup_py=True,
                  app_name=None):
+    """Setup deployment from a local directory using server image id ami-d0d8b8e0
+    Will setup a switch for future id's when the time comes.
+
+    Use target directory as a self-named python application, which should
+    include __init__.py and a properly formed setup.py
+    """
+    select_instance()
     if new:
-        install_nginx()
+        # install_nginx()
         install_pip()
         install_supervisor()
-        setup_supervisor()
     if dir is not None:
         copy_single_dir(dir)
     if file is not None:
         copy_single_file(file)
     if setup_py and dir is not None:
         execute_setup_py(dir)
+    if new:
+        #  Block of things to do for new after installing Python stuff
+        setup_supervisor(app_name)
+        unlink_port()
+        start_supervisor()
+    elif app_name is not None:
+        #  Run this block if not starting supervisor from scratch
+        restart_supervisor(app_name)
     return
 
-#  Need to append configuration bits to end of
-# /etc/supervisor/supervisord.conf
-
-# May need to run
-# sudo unlink /var/run/supervisor.sock
-# to get access to the port that runs when
-# sudo service supervisor start
-
-#  Then need to run the
-#  sudo service start supervisor
-
-#  Can check app status with
-#  sudo supervisorctl status
+#  Fab file 
