@@ -4,11 +4,12 @@ import boto.ec2
 import time
 from fabric.api import prompt
 from fabric.api import execute
-from fabric.api import sudo
+from fabric.api import sudo, local
 
 
 env.hosts = ['localhost', ]
 env.aws_region = 'us-west-2'
+env.ssh_key_path = '~/.ssh/pk-aws.pem'
 
 
 def host_type():
@@ -23,7 +24,7 @@ def get_ec2_connection():
             print "Connected to EC2 region %s" % env.aws_region
         else:
             msg = "Unable to connect to EC2 region %s" % env.aws_region
-            raise IOError(mwg % env.aws_region)
+            raise IOError(msg % env.aws_region)
     return env.ec2
 
 
@@ -98,7 +99,7 @@ def select_instance(state='running'):
 
     def validation(input):
         choice = int(input)
-        if not choice in range(1, len(env.instances) + 1):
+        if choice not in range(1, len(env.instances) + 1):
             raise ValueError("%d is not a valid instance" % choice)
         return choice
 
@@ -106,19 +107,88 @@ def select_instance(state='running'):
     env.active_instance = env.instances[choice - 1]['instance']
 
 
-def run_command_on_selected_server(command):
-    select_instance()
+def get_selected_hosts(string=False):
     selected_hosts = [
         'ubuntu@' + env.active_instance.public_dns_name
     ]
-    execute(command, hosts=selected_hosts)
+    if not string:
+        return selected_hosts
+    else:
+        #This block currently serving copy_single_file()
+        return str(selected_hosts[0])
+        print str(selected_hosts)
 
 
-def _install_nginx():
-    sudo('apt-get update')
-    sudo('apt-get install nginx')
-    sudo('/etc/init.d/nginx start')
+def run_command_on_selected_server(command):
+    select_instance()
+    # selected_hosts = [
+    #     'ubuntu@' + env.active_instance.public_dns_name
+    # ]
+    execute(command, hosts=get_selected_hosts())
+
+
+def install_pip():
+    def _install_pip():
+        sudo('apt-get install -y python-pip')
+    run_command_on_selected_server(_install_pip)
+
+
+def install_supervisor():
+
+    def _install_supervisor():
+        sudo('apt-get install -y supervisor')
+    run_command_on_selected_server(_install_supervisor)
 
 
 def install_nginx():
+
+    def _install_nginx():
+        sudo('apt-get update')
+        sudo('apt-get install -y nginx')
+        sudo('/etc/init.d/nginx start')
+
     run_command_on_selected_server(_install_nginx)
+
+
+def execute_setup_py(dir=None):
+
+    def _execute_setup_py(dir):
+        try:
+            pass
+        except TypeError:
+            pass
+
+
+def copy_single_file(file):
+    command = ('scp -i ~/.ssh/pk-aws.pem {file} '.format(file=file) +
+               get_selected_hosts(string=True) + ":~/")
+    local(command)
+
+
+def copy_single_dir(dir):
+
+    command = ('scp -rp {dir} '.format(dir=dir) +
+               get_selected_hosts(string=True) + ":~/")
+    #  A little bit of a hack here, but the -i flag wasn't parsing correctly
+    # local('ssh-add ~/.ssh/pk-aws')
+    local(command)
+
+
+def deploy_local(new=False, dir=None, file=None, setup_py=True):
+    if new:
+        install_nginx()
+        install_pip()
+        install_supervisor()
+    if dir is not None:
+        copy_single_dir(dir)
+    if file is not None:
+        copy_single_file(file)
+    if setup_py and dir is not None:
+        execute_setup_py(dir)
+    return
+
+
+# May need to run
+# sudo unlink /var/run/supervisor.sock
+# to get access to the port that runs when
+# sudo service supervisor start

@@ -10,13 +10,13 @@ setup(
     description="Basic Data Structures",
     long_description=long_description,
     # The project URL.
-    url='http://github.com/<jay-tyler/foo-git-deploy',
+    url='http://github.com/jay-tyler/foo-git-deploy',
     # Author details
     author='Jason Tyler',
     author_email='jmtyler@gmail.com',
     # Choose your license
     #   and remember to include the license text in a 'docs' directory.
     # license='MIT',
-    packages=['foo_git_deploy'],
+    packages=['myapp'],
     install_requires=['setuptools', ]
 )
