@@ -5,11 +5,14 @@ import time
 from fabric.api import prompt
 from fabric.api import execute
 from fabric.api import sudo, local
+from fabric.contrib import files
 
 
 env.hosts = ['localhost', ]
 env.aws_region = 'us-west-2'
 env.ssh_key_path = '~/.ssh/pk-aws.pem'
+PATH_TO_SUPRCONF = "/etc/supervisor/supervisord.conf"
+
 
 
 def host_type():
@@ -140,6 +143,17 @@ def install_supervisor():
     run_command_on_selected_server(_install_supervisor)
 
 
+def setup_supervisor(app_name):
+    def _setup_supervisor():
+        conf_text_lst = ["[program:{app_name}]",
+                         "command: /usr/bin/python -m {app_name}",
+                         "directory: /home/ubuntu/{app_name}",
+                         "autostart: true"]
+        conf_text = "\n".join(conf_text_lst).format(app_name=app_name)
+        files.append(PATH_TO_SUPRCONF, conf_text, use_sudo=True)
+    run_command_on_selected_server(_setup_supervisor)
+
+
 def install_nginx():
 
     def _install_nginx():
@@ -174,11 +188,13 @@ def copy_single_dir(dir):
     local(command)
 
 
-def deploy_local(new=False, dir=None, file=None, setup_py=True):
+def deploy_local(new=False, dir=None, file=None, setup_py=True,
+                 app_name=None):
     if new:
         install_nginx()
         install_pip()
         install_supervisor()
+        setup_supervisor()
     if dir is not None:
         copy_single_dir(dir)
     if file is not None:
