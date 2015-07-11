@@ -12,7 +12,7 @@ env.hosts = ['localhost', ]
 env.aws_region = 'us-west-2'
 env.ssh_key_path = '~/.ssh/pk-aws.pem'
 PATH_TO_SUPRCONF = "/etc/supervisor/supervisord.conf"
-
+PATH_TO_NGINXCONF = '/etc/nginx/sites-available'
 
 def host_type():
     run('uname -s')
@@ -194,27 +194,33 @@ def unlink_port():
     run_command_on_selected_server(_unlink_port)
 
 
-def setup_nginx_conf():
+def setup_nginx_conf(new=False):
     """"""
     def _setup_nginx_conf():
 
-        app_conf_l = ['server {{',
-        '    listen 80;'
-        '    server_name http://{dns}/;',
+        app_conf_l = ['server {',
+        '    listen 80;',
+        '    server_name http://{dns}/;'.format(
+             dns=env.active_instance.public_dns_name),
         '    access_log  /var/log/nginx/test.log;\n',
-        '    location / {{',
+        '    location / {',
         '        proxy_pass http://127.0.0.1:8000;',
         '        proxy_set_header Host $host;',
         '        proxy_set_header X-Real-IP $remote_addr;',
         '        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;',
-        '    }}']
-        app_conf = '/n'.join(app_conf_l).format(
-                   dns=env.active_instance.public_dns_name)
+        '    }',
+        '}']
+        # app_conf = '/n'.join(app_conf_l).format(
+        #            dns=env.active_instance.public_dns_name)
+        if new:
+            sudo('mv {path}/default {path}/default.orig'.format(
+                 path=PATH_TO_NGINXCONF))
+            # sudo('rm {path}/default'.format(path=PATH_TO_NGINXCONF))
+            sudo('touch {path}/default'.format(path=PATH_TO_NGINXCONF))
 
-        # sudo('mv /etc/nginx/sites-available/default\
-        #          /etc/nginx/sites-available/default.orig')
-        # sudo('rm /etc/nginx/sites-available/default')
-        sudo('touch /etc/nginx/sites-available/default')
+        files.append(PATH_TO_NGINXCONF + '/default', 
+                     app_conf_l, use_sudo=True)
+        sudo('/etc/init.d/nginx restart')
 
     run_command_on_selected_server(_setup_nginx_conf)
 
