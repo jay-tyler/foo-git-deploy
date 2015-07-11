@@ -14,6 +14,7 @@ env.ssh_key_path = '~/.ssh/pk-aws.pem'
 PATH_TO_SUPRCONF = "/etc/supervisor/supervisord.conf"
 PATH_TO_NGINXCONF = '/etc/nginx/sites-available'
 
+
 def host_type():
     run('uname -s')
 
@@ -153,7 +154,8 @@ def setup_supervisor(app_name):
 
 def start_supervisor():
     def _start_supervisor():
-        sudo('service supervisor start')
+        # sudo('service supervisor start')
+        sudo('sudo supervisord')
 
     run_command_on_selected_server(_start_supervisor)
 
@@ -213,12 +215,13 @@ def setup_nginx_conf(new=False):
         # app_conf = '/n'.join(app_conf_l).format(
         #            dns=env.active_instance.public_dns_name)
         if new:
+            # This code can be a pain if fabric fails to fully install first
+            # in the first instance. Need to get Fabric's try/accept syntax
             sudo('mv {path}/default {path}/default.orig'.format(
                  path=PATH_TO_NGINXCONF))
-            # sudo('rm {path}/default'.format(path=PATH_TO_NGINXCONF))
             sudo('touch {path}/default'.format(path=PATH_TO_NGINXCONF))
 
-        files.append(PATH_TO_NGINXCONF + '/default', 
+        files.append(PATH_TO_NGINXCONF + '/default',
                      app_conf_l, use_sudo=True)
         sudo('/etc/init.d/nginx restart')
 
@@ -249,7 +252,7 @@ def deploy_local(new=False, dir=None, file=None, setup_py=True,
     """
     select_instance()
     if new:
-        # install_nginx()
+        install_nginx()
         install_pip()
         install_supervisor()
     if dir is not None:
@@ -261,11 +264,10 @@ def deploy_local(new=False, dir=None, file=None, setup_py=True,
     if new:
         #  Block of things to do for new after installing Python stuff
         setup_supervisor(app_name)
+        setup_nginx_conf(new=True)
         unlink_port()
         start_supervisor()
     elif app_name is not None:
         #  Run this block if not starting supervisor from scratch
         restart_supervisor(app_name)
     return
-
-#  Fab file 
